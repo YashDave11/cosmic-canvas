@@ -1,4 +1,4 @@
-# Multi-stage build for Next.js on Cloud Run
+# Multi-stage build for Next.js app
 FROM node:18-alpine AS base
 
 # Install dependencies only when needed
@@ -19,7 +19,7 @@ COPY . .
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Build Next.js
+# Build Next.js app
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -32,15 +32,21 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy built application
+# Copy public assets
 COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
+# Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
-# Cloud Run sets PORT environment variable
 EXPOSE 8080
+
 ENV PORT 8080
 ENV HOSTNAME "0.0.0.0"
 

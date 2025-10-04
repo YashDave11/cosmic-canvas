@@ -1,179 +1,207 @@
-# Deploy to Google Cloud Run + Cloud Storage
-
-Complete guide to deploy your app on Google Cloud Run with tiles on Cloud Storage.
+# Google Cloud Run Deployment Guide
 
 ## Prerequisites
 
-1. Google Cloud account (free tier includes $300 credit)
-2. Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install
+- Google Cloud account (free tier available)
+- Google Cloud CLI installed
+- Docker installed locally (optional, for testing)
+
+## Architecture
+
+- **App**: Google Cloud Run (serverless containers)
+- **Tiles**: Google Cloud Storage (static files)
+- **Cost**: Free tier covers most usage!
+
+---
 
 ## Part 1: Setup Google Cloud Storage for Tiles
 
-### 1. Create GCS Bucket
+### 1. Install Google Cloud CLI
+
+```bash
+# Windows (PowerShell as Admin)
+(New-Object Net.WebClient).DownloadFile("https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe", "$env:Temp\GoogleCloudSDKInstaller.exe")
+& $env:Temp\GoogleCloudSDKInstaller.exe
+
+# Or download from: https://cloud.google.com/sdk/docs/install
+```
+
+### 2. Login and Setup Project
 
 ```bash
 # Login to Google Cloud
 gcloud auth login
 
-# Set your project ID
-gcloud config set project YOUR_PROJECT_ID
+# Create new project (or use existing)
+gcloud projects create cosmic-canvas-app --name="Cosmic Canvas"
 
-# Create bucket for tiles (choose unique name)
+# Set as active project
+gcloud config set project cosmic-canvas-app
+
+# Enable required APIs
+gcloud services enable storage.googleapis.com
+gcloud services enable run.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
+```
+
+### 3. Create Storage Bucket for Tiles
+
+```bash
+# Create bucket (choose unique name)
 gsutil mb -c STANDARD -l us-central1 gs://cosmic-canvas-tiles
 
 # Make bucket publicly readable
 gsutil iam ch allUsers:objectViewer gs://cosmic-canvas-tiles
-```
 
-### 2. Configure CORS
-
-Create `cors.json`:
-
-```json
-[
+# Set CORS for OpenSeadragon
+echo '[
   {
     "origin": ["*"],
     "method": ["GET", "HEAD"],
     "responseHeader": ["Content-Type", "Access-Control-Allow-Origin"],
     "maxAgeSeconds": 3600
   }
-]
-```
+]' > cors.json
 
-Apply CORS:
-
-```bash
 gsutil cors set cors.json gs://cosmic-canvas-tiles
 ```
 
-### 3. Upload Tiles
+### 4. Upload Tiles to GCS
 
 ```bash
-# Upload all tiles from your local machine
+# From your local machine, upload tiles
 gsutil -m cp -r public/TIFF_tiles/* gs://cosmic-canvas-tiles/
-
-# Set cache control for better performance
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000" gs://cosmic-canvas-tiles/**
 
 # Verify upload
 gsutil ls gs://cosmic-canvas-tiles/
+
+# Set cache headers for better performance
+gsutil -m setmeta -h "Cache-Control:public, max-age=31536000" gs://cosmic-canvas-tiles/**
 ```
 
-### 4. Copy Metadata File
+Your tiles are now at:
 
-```bash
-# Upload the metadata file
-gsutil cp public/TIFF_tiles/images-metadata.json gs://cosmic-canvas-tiles/images-metadata.json
 ```
+https://storage.googleapis.com/cosmic-canvas-tiles/heic0206c/heic0206c.dzi
+https://storage.googleapis.com/cosmic-canvas-tiles/heic0503a/heic0503a.dzi
+https://storage.googleapis.com/cosmic-canvas-tiles/heic0506b/heic0506b.dzi
+```
+
+---
 
 ## Part 2: Deploy App to Cloud Run
 
-### Option A: Manual Deployment (Quick Start)
-
-```bash
-# Enable required APIs
-gcloud services enable run.googleapis.com
-gcloud services enable cloudbuild.googleapis.com
-gcloud services enable containerregistry.googleapis.com
-
-# Build and deploy in one command
-gcloud run deploy cosmic-canvas \
-  --source . \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --memory 512Mi \
-  --cpu 1 \
-  --max-instances 10 \
-  --set-env-vars NEXT_PUBLIC_TILES_BASE_URL=https://storage.googleapis.com/cosmic-canvas-tiles
-
-# This will:
-# 1. Build Docker image
-# 2. Push to Container Registry
-# 3. Deploy to Cloud Run
-# 4. Give you a public URL
-```
-
-### Option B: Automatic Deployment from GitHub
+### Method A: Deploy from GitHub (Recommended)
 
 #### 1. Connect GitHub Repository
 
 ```bash
-# Connect your GitHub repo to Cloud Build
-gcloud builds triggers create github \
-  --repo-name=cosmic-canvas \
-  --repo-owner=YOUR_GITHUB_USERNAME \
-  --branch-pattern="^main$" \
-  --build-config=cloudbuild.yaml
+# Enable Cloud Build GitHub integration
+gcloud alpha builds connections create github cosmic-canvas-github \
+  --region=us-central1
+
+# Follow the prompts to authorize GitHub access
 ```
 
-#### 2. Update cloudbuild.yaml
+#### 2. Create Cloud Build Trigger
 
-Edit `cloudbuild.yaml` and replace `YOUR-BUCKET-NAME` with your actual bucket name:
+```bash
+# Create trigger for automatic deployments
+gcloud builds triggers create github \
+  --name=cosmic-canvas-deploy \
+  --repo-name=cosmic-canvas \
+  --repo-owner=YashDave11 \
+  --branch-pattern=^main$ \
+  --build-config=cloudbuild.yaml \
+  --region=us-central1
+```
+
+#### 3. Create `cloudbuild.yaml`
+
+This file tells Cloud Build how to build and deploy:
 
 ```yaml
-- "NEXT_PUBLIC_TILES_BASE_URL=https://storage.googleapis.com/cosmic-canvas-tiles"
+steps:
+  # Build the container image
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["build", "-t", "gcr.io/$PROJECT_ID/cosmic-canvas:$COMMIT_SHA", "."]
+
+  # Push the container image to Container Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/cosmic-canvas:$COMMIT_SHA"]
+
+  # Deploy container image to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "cosmic-canvas"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/cosmic-canvas:$COMMIT_SHA"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--set-env-vars"
+      - "NEXT_PUBLIC_TILES_BASE_URL=https://storage.googleapis.com/cosmic-canvas-tiles"
+
+images:
+  - "gcr.io/$PROJECT_ID/cosmic-canvas:$COMMIT_SHA"
+
+options:
+  machineType: "E2_HIGHCPU_8"
+  logging: CLOUD_LOGGING_ONLY
 ```
 
-#### 3. Push to GitHub
+### Method B: Deploy Manually from Local
+
+#### 1. Build and Push Container
 
 ```bash
-git add .
-git commit -m "Add Cloud Run deployment config"
-git push origin main
+# Set project ID
+export PROJECT_ID=cosmic-canvas-app
+
+# Build container
+gcloud builds submit --tag gcr.io/$PROJECT_ID/cosmic-canvas
+
+# This will take 5-10 minutes
 ```
 
-Now every push to `main` branch will automatically deploy!
-
-## Part 3: Update Metadata API for Cloud Storage
-
-The app needs to read metadata from Cloud Storage instead of local files.
-
-### 1. Download metadata at build time
-
-Update `Dockerfile` to fetch metadata:
-
-```dockerfile
-# Add after COPY --from=builder /app/public ./public
-RUN mkdir -p ./public/TIFF_tiles
-RUN wget -O ./public/TIFF_tiles/images-metadata.json \
-  https://storage.googleapis.com/cosmic-canvas-tiles/images-metadata.json || \
-  echo '[]' > ./public/TIFF_tiles/images-metadata.json
-```
-
-### 2. Or use Cloud Storage API (Better for dynamic updates)
-
-Install Google Cloud Storage client:
+#### 2. Deploy to Cloud Run
 
 ```bash
-npm install @google-cloud/storage
+gcloud run deploy cosmic-canvas \
+  --image gcr.io/$PROJECT_ID/cosmic-canvas \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars NEXT_PUBLIC_TILES_BASE_URL=https://storage.googleapis.com/cosmic-canvas-tiles \
+  --memory 512Mi \
+  --cpu 1 \
+  --max-instances 10
 ```
 
-Update `app/api/images/route.ts` to fetch from GCS.
+---
 
-## Cost Estimate (Free Tier)
+## Part 3: Update Metadata File
 
-### Cloud Storage
+Update `public/TIFF_tiles/images-metadata.json` to work with cloud storage:
 
-- Storage: 5 GB free/month (your tiles: ~2-3 GB) ✅
-- Network egress: 1 GB free/month
-- Operations: 5,000 Class A ops free/month
+The app will automatically use the `NEXT_PUBLIC_TILES_BASE_URL` environment variable.
 
-### Cloud Run
+---
 
-- 2 million requests/month free ✅
-- 360,000 GB-seconds memory free/month ✅
-- 180,000 vCPU-seconds free/month ✅
+## Testing
 
-**Your app will likely stay in free tier!**
-
-## Testing Locally with Docker
+### Test Locally with Docker
 
 ```bash
-# Build image
+# Build
 docker build -t cosmic-canvas .
 
-# Run locally
+# Run with GCS tiles
 docker run -p 8080:8080 \
   -e NEXT_PUBLIC_TILES_BASE_URL=https://storage.googleapis.com/cosmic-canvas-tiles \
   cosmic-canvas
@@ -181,73 +209,93 @@ docker run -p 8080:8080 \
 # Open http://localhost:8080
 ```
 
+### Test Cloud Run Deployment
+
+After deployment, Cloud Run will give you a URL like:
+
+```
+https://cosmic-canvas-xxxxx-uc.a.run.app
+```
+
+---
+
+## Cost Estimate (Free Tier)
+
+### Cloud Storage
+
+- **Storage**: 5 GB free/month (your tiles: ~2-3 GB) ✅
+- **Network**: 1 GB free egress/month
+- **Operations**: 5,000 Class A ops free/month
+
+### Cloud Run
+
+- **CPU**: 180,000 vCPU-seconds free/month
+- **Memory**: 360,000 GiB-seconds free/month
+- **Requests**: 2 million requests free/month
+- **Network**: 1 GB egress free/month
+
+**Total**: Should stay in free tier for moderate traffic! 🎉
+
+---
+
+## Monitoring
+
+```bash
+# View logs
+gcloud run services logs read cosmic-canvas --region us-central1
+
+# View service details
+gcloud run services describe cosmic-canvas --region us-central1
+
+# Check storage usage
+gsutil du -sh gs://cosmic-canvas-tiles
+```
+
+---
+
 ## Custom Domain (Optional)
 
 ```bash
 # Map custom domain
-gcloud run services update cosmic-canvas \
-  --region us-central1 \
-  --platform managed \
-  --add-custom-domain your-domain.com
+gcloud run domain-mappings create \
+  --service cosmic-canvas \
+  --domain your-domain.com \
+  --region us-central1
 ```
 
-## Monitoring
-
-View logs:
-
-```bash
-gcloud run services logs read cosmic-canvas --region us-central1
-```
-
-View metrics in Cloud Console:
-https://console.cloud.google.com/run
+---
 
 ## Troubleshooting
 
 ### Build fails
 
-```bash
-# Check build logs
-gcloud builds list --limit 5
-gcloud builds log BUILD_ID
-```
-
-### Service not accessible
-
-```bash
-# Check service status
-gcloud run services describe cosmic-canvas --region us-central1
-
-# Make sure it's public
-gcloud run services add-iam-policy-binding cosmic-canvas \
-  --region us-central1 \
-  --member="allUsers" \
-  --role="roles/run.invoker"
-```
+- Check Dockerfile syntax
+- Ensure `output: 'standalone'` in next.config.mjs
+- Check Cloud Build logs: `gcloud builds list`
 
 ### Tiles not loading
 
-- Check CORS: `gsutil cors get gs://cosmic-canvas-tiles`
+- Verify CORS: `gsutil cors get gs://cosmic-canvas-tiles`
 - Check bucket is public: `gsutil iam get gs://cosmic-canvas-tiles`
-- Verify URLs in browser: `https://storage.googleapis.com/cosmic-canvas-tiles/heic0206c/heic0206c.dzi`
+- Test tile URL directly in browser
 
-## Cleanup
+### App crashes
+
+- Check logs: `gcloud run services logs read cosmic-canvas`
+- Increase memory: `--memory 1Gi`
+- Check environment variables are set
+
+---
+
+## Cleanup (if needed)
 
 ```bash
 # Delete Cloud Run service
 gcloud run services delete cosmic-canvas --region us-central1
 
-# Delete bucket
+# Delete storage bucket
 gsutil rm -r gs://cosmic-canvas-tiles
 
 # Delete container images
-gcloud container images delete gcr.io/PROJECT_ID/cosmic-canvas
+gcloud container images delete gcr.io/$PROJECT_ID/cosmic-canvas
 ```
-
-## Next Steps
-
-1. ✅ Upload tiles to GCS
-2. ✅ Deploy app to Cloud Run
-3. 🎨 Add custom domain
-4. 📊 Setup monitoring alerts
-5. 🚀 Optimize with CDN (optional)
