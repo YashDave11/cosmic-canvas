@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Production
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large files - Don't push to GitHub
+images/*.jpg
+images/*.png
+images/*.tif
+images/*.tiff
+public/*.jpg
+public/*.png
+public/*.tif
+public/*.tiff
+
+# Tiles - Don't push large tile folders
+public/tiles/**/*.jpg
+public/tiles/**/*.png
+E:\NASA_TILES/
+
+# Keep only small files
+!public/placeholder*.jpg
+!public/placeholder*.png
+!public/nasa.jpg
