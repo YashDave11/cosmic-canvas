@@ -44,10 +44,10 @@ images/*.jpg
 images/*.png
 images/*.tif
 images/*.tiff
-public/*.jpg
-public/*.png
-public/*.tif
-public/*.tiff
+# public/*.jpg
+# public/*.png
+# public/*.tif
+# public/*.tiff
 
 # Tiles - Don't push large tile folders
 public/tiles/**/*.jpg
