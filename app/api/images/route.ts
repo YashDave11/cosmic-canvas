@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { getDziUrl, getThumbnailUrl, TILES_CONFIG } from "@/lib/tiles-config";
 
-// Configuration - Load from public/TIFF_tiles
+// Configuration - Load from public/TIFF_tiles or cloud storage
 const TIFF_TILES_DIR = path.join(process.cwd(), "public", "TIFF_tiles");
 const METADATA_FILE = path.join(TIFF_TILES_DIR, "images-metadata.json");
 
