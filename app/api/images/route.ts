@@ -2,36 +2,37 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
-// Configuration
-const TILES_DIR = "E:\\NASA_TILES";
-const METADATA_FILE = path.join(TILES_DIR, "images-metadata.json");
+// Configuration - Load from public/TIFF_tiles
+const TIFF_TILES_DIR = path.join(process.cwd(), "public", "TIFF_tiles");
+const METADATA_FILE = path.join(TIFF_TILES_DIR, "images-metadata.json");
 
 export async function GET() {
   try {
     const allImages: any[] = [];
 
-    // Load images from E:\NASA_TILES (new system)
+    // Load TIFF images from public/TIFF_tiles
     if (fs.existsSync(METADATA_FILE)) {
       const metadataContent = fs.readFileSync(METADATA_FILE, "utf-8");
       const metadata = JSON.parse(metadataContent);
 
-      const externalImages = metadata.map((img: any) => ({
+      const tiffImages = metadata.map((img: any) => ({
         id: img.id || img.name,
         name: img.name || img.id,
-        dziUrl: `/api/tiles/${img.id}/${img.id}.dzi`,
-        thumbnailUrl: `/api/tiles/${img.id}/${img.id}_thumb.jpg`,
+        dziUrl: `/TIFF_tiles/${img.id}/${img.id}.dzi`,
+        thumbnailUrl: `/TIFF_tiles/${img.id}/${img.id}_thumb.jpg`,
         description: `${img.width}×${img.height} pixels`,
         size: `${((img.width * img.height) / 1000000).toFixed(0)} MP`,
         levels: img.levels || 0,
-        format: img.format || "unknown",
+        format: img.format || "tiff",
         generatedAt: img.generatedAt,
-        source: "external", // Mark as external
+        source: "tiff", // Mark as TIFF
       }));
 
-      allImages.push(...externalImages);
+      allImages.push(...tiffImages);
+      console.log(`✅ Loaded ${tiffImages.length} TIFF images`);
     }
 
-    // Add legacy local images (from public/tiles/)
+    // Add legacy JPEG image (from public/tiles/)
     const legacyImages = [
       {
         id: "andromeda-galaxy",
