@@ -1,5 +1,4 @@
-import { Button } from "@/components/ui/button";
-import { ArrowRight, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
 const communityImages = [
   { src: "/nebula-space-cosmic-background.jpg", label: "Cosmic Nebula" },
@@ -56,16 +55,9 @@ export function CommunitySection() {
           ))}
         </div>
 
-        {/* Final CTA */}
+        {/* Info Text */}
         <div className="text-center">
-          <Button
-            size="lg"
-            className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-10 py-7 h-auto animate-pulse-glow"
-          >
-            Start Your Cosmic Journey
-            <ArrowRight className="ml-2 w-5 h-5" />
-          </Button>
-          <p className="mt-6 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             No account required • Free to explore • Powered by NASA
           </p>
         </div>
