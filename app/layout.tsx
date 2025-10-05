@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   description:
     "A professional-grade web application for exploring ultra-high-resolution astronomical images with seamless zoom, pan, and annotation capabilities. Powered by NASA data.",
   generator: "Next.js",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
