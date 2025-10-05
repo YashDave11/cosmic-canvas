@@ -35,7 +35,7 @@ export function HeroSection() {
           </div>
         </div>
       )}
-      (
+
       <section className="relative min-h-screen flex items-center justify-center px-4 pt-20">
         {/* Enhanced Background */}
         <div className="absolute inset-0 overflow-hidden">
